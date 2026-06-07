@@ -1,0 +1,97 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+
+# Environment files (IMPORTANT - Contains sensitive data)
+.env
+.env.local
+.env.dev
+.env.prod
+.env.production
+.env.development
+.env.staging
+*.env
+
+# Docker related files that should be ignored
+docker-compose.override.yml
+.docker/
+
+# SSL certificates and secrets
+nginx/ssl/
+secrets/
+certs/
+
+certs
+server.crt
+server.key
+server.crt~
+server.key~
+
+server.exe
+server.exe~
+
+uploads
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.idea/*
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.exe
+*.exe~
+*.sw?
+
+# Temporary folders
+tmp/
+temp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+pgdata/
+postgres-data/
+data/postgres/
+data/postgresql/
+.pgdata/
+postmaster.pid
+*.pid
+*.dump
+*.sql.gz
+*.psql_history
+.pgpass
+
+# Backup files
+*.backup
+*.bak
+
+backend/bin/
+backend/tmp/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Tauri / Rust
+frontend/src-tauri/target/
+
+# OS
+Thumbs.db
+
+*.swp
