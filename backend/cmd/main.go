@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"log"
+	"net/http"
+	"vision-ward-terminal/backend/internal/ws"
+)
 
 func main() {
-	fmt.Println("Hello World")
+	http.HandleFunc("/ws", ws.HandleWS)
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

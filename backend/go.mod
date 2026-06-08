@@ -1,3 +1,5 @@
 module vision-ward-terminal/backend
 
 go 1.26.1
+
+require github.com/coder/websocket v1.8.14 // indirect

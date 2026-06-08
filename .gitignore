@@ -83,10 +83,15 @@ postmaster.pid
 
 backend/bin/
 backend/tmp/
+backend/test.md
+
+
 
 # Node
 frontend/node_modules/
 frontend/dist/
+frontend/.vscode/
+
 
 # Tauri / Rust
 frontend/src-tauri/target/
