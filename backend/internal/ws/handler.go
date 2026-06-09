@@ -3,13 +3,14 @@ package ws
 import (
 	"log"
 	"net/http"
-	"time"
+	"vision-ward-terminal/backend/internal/binance"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 )
 
 func HandleWS(w http.ResponseWriter, r *http.Request) {
+
 	c, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Printf("Accept ws Error: %v", err)
@@ -23,15 +24,15 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	}(c)
 
 	ctx := r.Context()
+	orderbookBTC := binance.OrderbookBTC(ctx)
 
 	for ctx.Err() == nil {
-		err := wsjson.Write(ctx, c, "Hello")
+		orderbookBTCData := <-orderbookBTC
+		err := wsjson.Write(ctx, c, orderbookBTCData)
 		if err != nil {
 			log.Printf("Write ws Error: %v", err)
 			break
 		}
-
-		time.Sleep(time.Millisecond * 100)
 
 	}
 
