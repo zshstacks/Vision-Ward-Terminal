@@ -3,13 +3,15 @@ package ws
 import (
 	"log"
 	"net/http"
-	"vision-ward-terminal/backend/internal/orderbook"
 
 	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 )
 
-func HandleWS(w http.ResponseWriter, r *http.Request) {
+type Handler struct {
+	hub *Hub
+}
+
+func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
@@ -18,24 +20,14 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Accept ws Error: %v", err)
 		return
 	}
-	defer func(c *websocket.Conn) {
-		err := c.CloseNow()
-		if err != nil {
-			log.Printf("CloseNow ws Error: %v", err)
-		}
-	}(c)
 
-	ctx := r.Context()
-	orderbookBTC := orderbook.ManageOrderBookBTC(ctx)
+	h.hub.register <- c
+	<-r.Context().Done() //Wait until the client disconnects
+	h.hub.unregister <- c
+}
 
-	for ctx.Err() == nil {
-		orderbookBTCData := <-orderbookBTC
-		err := wsjson.Write(ctx, c, orderbookBTCData)
-		if err != nil {
-			log.Printf("Write ws Error: %v", err)
-			break
-		}
-
+func NewHandler(hub *Hub) *Handler {
+	return &Handler{
+		hub: hub,
 	}
-
 }

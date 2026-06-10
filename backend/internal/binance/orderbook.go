@@ -29,7 +29,7 @@ func OrderbookBTC(ctx context.Context) <-chan DepthUpdateMessage {
 		Scheme:   "wss",
 		Host:     "fstream.binance.com",
 		Path:     "/stream",
-		RawQuery: "streams=btcusdt@depth20@100ms",
+		RawQuery: "streams=btcusdt@depth@100ms",
 	}
 
 	log.Printf("connecting to %s", u.String())
@@ -40,6 +40,7 @@ func OrderbookBTC(ctx context.Context) <-chan DepthUpdateMessage {
 			log.Printf("dial: %v", err)
 			return
 		}
+		c.SetReadLimit(512 * 1024)
 		defer c.Close(websocket.StatusNormalClosure, "")
 
 		for ctx.Err() == nil {
