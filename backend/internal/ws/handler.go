@@ -3,7 +3,7 @@ package ws
 import (
 	"log"
 	"net/http"
-	"vision-ward-terminal/backend/internal/binance"
+	"vision-ward-terminal/backend/internal/orderbook"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -11,7 +11,9 @@ import (
 
 func HandleWS(w http.ResponseWriter, r *http.Request) {
 
-	c, err := websocket.Accept(w, r, nil)
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
 	if err != nil {
 		log.Printf("Accept ws Error: %v", err)
 		return
@@ -24,7 +26,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	}(c)
 
 	ctx := r.Context()
-	orderbookBTC := binance.OrderbookBTC(ctx)
+	orderbookBTC := orderbook.ManageOrderBookBTC(ctx)
 
 	for ctx.Err() == nil {
 		orderbookBTCData := <-orderbookBTC
