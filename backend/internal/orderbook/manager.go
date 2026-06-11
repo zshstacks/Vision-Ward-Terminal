@@ -12,9 +12,9 @@ import (
 )
 
 type OrderBookSnapshot struct {
-	LastUpdateID int64             `json:"lastUpdateId"`
-	Bids         map[string]string `json:"bids"` //O(1)
-	Asks         map[string]string `json:"asks"`
+	LastUpdateID int64               `json:"lastUpdateId"`
+	Bids         map[float64]float64 `json:"bids"` //O(1)
+	Asks         map[float64]float64 `json:"asks"`
 }
 
 type SortedOrderBookSnapshot struct {
@@ -33,19 +33,56 @@ func ManageOrderBookBTC(ctx context.Context) <-chan SortedOrderBookSnapshot {
 	ch := make(chan SortedOrderBookSnapshot)
 
 	go func() {
-		snapshot, err := fetchSnapshot()
+		snapshot, err := fetchSnapshot(ctx)
 		if err != nil {
 			return
 		}
 
 		orderbookBTC := binance.OrderbookBTC(ctx)
 
-		for ctx.Err() == nil {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-orderbookBTC:
+				if msg.Data.FinalUpdate <= snapshot.LastUpdateID {
+					continue
+				}
 
-			orderbookBTCData := <-orderbookBTC
+				//apply bid updates
+				for _, upd := range msg.Data.Bids {
+					price, _ := strconv.ParseFloat(upd[0], 64)
+					qty, _ := strconv.ParseFloat(upd[1], 64)
 
-			if orderbookBTCData.Data.FinalUpdate <= snapshot.LastUpdateID {
-				continue
+					if qty == 0 {
+						// remove price from snapshot.Bids if exists
+						delete(snapshot.Bids, price)
+					} else {
+						// update qty if exists, else append
+						snapshot.Bids[price] = qty
+					}
+				}
+
+				//apply ask updates
+				for _, upd := range msg.Data.Asks {
+					price, _ := strconv.ParseFloat(upd[0], 64)
+					qty, _ := strconv.ParseFloat(upd[1], 64)
+
+					if qty == 0 {
+						// remove price from snapshot.Asks if exists
+						delete(snapshot.Asks, price)
+					} else {
+						// update qty if exists, else append
+						snapshot.Asks[price] = qty
+					}
+				}
+				snapshot.LastUpdateID = msg.Data.FinalUpdate
+
+				ch <- SortedOrderBookSnapshot{
+					LastUpdateID: snapshot.LastUpdateID,
+					Bids:         sortBids(snapshot.Bids),
+					Asks:         sortAsks(snapshot.Asks),
+				}
 			}
 
 			//correct Binance algorithm:
@@ -76,63 +113,24 @@ func ManageOrderBookBTC(ctx context.Context) <-chan SortedOrderBookSnapshot {
 			//	}
 			//}
 
-			//apply bid updates
-			for _, upd := range orderbookBTCData.Data.Bids {
-				price := upd[0]
-				qty := upd[1]
-
-				qp, err := strconv.ParseFloat(qty, 64)
-				if err != nil {
-					log.Printf("Failed to parse qty: %v", err)
-					continue
-				}
-
-				if qp == 0 {
-					// remove price from snapshot.Bids if exists
-					delete(snapshot.Bids, price)
-				} else {
-					// update qty if exists, else append
-					snapshot.Bids[price] = qty
-				}
-			}
-
-			//apply ask updates
-			for _, upd := range orderbookBTCData.Data.Asks {
-				price := upd[0]
-				qty := upd[1]
-
-				qp, err := strconv.ParseFloat(qty, 64)
-				if err != nil {
-					log.Printf("Failed to parse qty: %v", err)
-					continue
-				}
-
-				if qp == 0 {
-					// remove price from snapshot.Asks if exists
-					delete(snapshot.Asks, price)
-				} else {
-					// update qty if exists, else append
-					snapshot.Asks[price] = qty
-				}
-			}
-			snapshot.LastUpdateID = orderbookBTCData.Data.FinalUpdate
-
-			ch <- SortedOrderBookSnapshot{
-				LastUpdateID: snapshot.LastUpdateID,
-				Bids:         sortBids(snapshot.Bids),
-				Asks:         sortAsks(snapshot.Asks),
-			}
 		}
 	}()
 
 	return ch
 }
 
-func fetchSnapshot() (*OrderBookSnapshot, error) {
+func fetchSnapshot(ctx context.Context) (*OrderBookSnapshot, error) {
 	snapshotURL := "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=100"
-	resp, err := http.Get(snapshotURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, snapshotURL, nil)
 	if err != nil {
 		log.Printf("Failed to fetch snapshot: %v", err)
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("Client execution err: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -151,20 +149,14 @@ func fetchSnapshot() (*OrderBookSnapshot, error) {
 	}
 
 	snapshot.LastUpdateID = rawSnapshot.LastUpdateID
-	snapshot.Bids = make(map[string]string)
-	snapshot.Asks = make(map[string]string)
+	snapshot.Bids = make(map[float64]float64)
+	snapshot.Asks = make(map[float64]float64)
 
 	for _, upd := range rawSnapshot.Bids {
-		price := upd[0]
-		qty := upd[1]
+		price, _ := strconv.ParseFloat(upd[0], 64)
+		qty, _ := strconv.ParseFloat(upd[1], 64)
 
-		qp, err := strconv.ParseFloat(qty, 64)
-		if err != nil {
-			log.Printf("Failed to parse qty: %v", err)
-			continue
-		}
-
-		if qp == 0 {
+		if qty == 0 {
 			// remove price from snapshot.Bids if exists
 			delete(snapshot.Bids, price)
 		} else {
@@ -174,16 +166,10 @@ func fetchSnapshot() (*OrderBookSnapshot, error) {
 	}
 
 	for _, upd := range rawSnapshot.Asks {
-		price := upd[0]
-		qty := upd[1]
+		price, _ := strconv.ParseFloat(upd[0], 64)
+		qty, _ := strconv.ParseFloat(upd[1], 64)
 
-		qp, err := strconv.ParseFloat(qty, 64)
-		if err != nil {
-			log.Printf("Failed to parse qty: %v", err)
-			continue
-		}
-
-		if qp == 0 {
+		if qty == 0 {
 			// remove price from snapshot.Asks if exists
 			delete(snapshot.Asks, price)
 		} else {
@@ -197,37 +183,36 @@ func fetchSnapshot() (*OrderBookSnapshot, error) {
 }
 
 // helpers: sort bids desc, asks asc
-func sortBids(bids map[string]string) [][]string {
-	keys := make([]string, 0, len(bids))
+func sortBids(bids map[float64]float64) [][]string {
+	keys := make([]float64, 0, len(bids))
 	for k := range bids {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		pi, _ := strconv.ParseFloat(keys[i], 64)
-		pj, _ := strconv.ParseFloat(keys[j], 64)
-		return pi > pj
+
+		return keys[i] > keys[j]
 	})
 	result := make([][]string, 0, len(keys))
 	for _, k := range keys {
-		result = append(result, []string{k, bids[k]})
+		result = append(result, []string{strconv.FormatFloat(k, 'f', -1, 64), strconv.FormatFloat(bids[k], 'f', -1, 64)})
 	}
 	return result
 }
 
-func sortAsks(asks map[string]string) [][]string {
-	keys := make([]string, 0, len(asks))
+func sortAsks(asks map[float64]float64) [][]string {
+	keys := make([]float64, 0, len(asks))
 	for k := range asks {
 		keys = append(keys, k)
 	}
 
 	sort.Slice(keys, func(i, j int) bool {
-		pi, _ := strconv.ParseFloat(keys[i], 64)
-		pj, _ := strconv.ParseFloat(keys[j], 64)
-		return pi < pj
+
+		return keys[i] < keys[j]
 	})
 	result := make([][]string, 0, len(keys))
 	for _, k := range keys {
-		result = append(result, []string{k, asks[k]})
+		result = append(result, []string{strconv.FormatFloat(k, 'f', -1, 64), strconv.FormatFloat(asks[k], 'f', -1, 64)})
+
 	}
 	return result
 }

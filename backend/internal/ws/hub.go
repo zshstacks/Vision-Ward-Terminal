@@ -42,8 +42,14 @@ func (h *Hub) Run(ctx context.Context) {
 				err := client.Write(ctx, websocket.MessageText, message)
 				if err != nil {
 					delete(h.clients, client)
+					client.CloseNow()
 				}
 			}
+		case <-ctx.Done():
+			for client := range h.clients {
+				client.CloseNow()
+			}
+			return
 		}
 	}
 }
