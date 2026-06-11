@@ -91,6 +91,7 @@ backend/test.md
 frontend/node_modules/
 frontend/dist/
 frontend/.vscode/
+frontend/.env
 
 
 # Tauri / Rust

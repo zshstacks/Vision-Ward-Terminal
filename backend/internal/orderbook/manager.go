@@ -48,6 +48,11 @@ func ManageOrderBookBTC(ctx context.Context) <-chan SortedOrderBookSnapshot {
 				continue
 			}
 
+			//correct Binance algorithm:
+			//Start WebSocket connection first
+			//Then fetch the REST snapshot
+			//Check anchor on incoming messages
+
 			//if !synced {
 			//	if orderbookBTCData.Data.FirstUpdate <= snapshot.LastUpdateID && orderbookBTCData.Data.FinalUpdate >= snapshot.LastUpdateID {
 			//		synced = true
