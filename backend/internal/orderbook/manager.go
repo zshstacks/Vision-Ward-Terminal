@@ -33,20 +33,53 @@ func ManageOrderBookBTC(ctx context.Context) <-chan SortedOrderBookSnapshot {
 	ch := make(chan SortedOrderBookSnapshot)
 
 	go func() {
+		orderbookBTC := binance.OrderbookBTC(ctx)
+
 		snapshot, err := fetchSnapshot(ctx)
 		if err != nil {
 			return
 		}
 
-		orderbookBTC := binance.OrderbookBTC(ctx)
+		synced := false
 
+	outer:
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case msg := <-orderbookBTC:
-				if msg.Data.FinalUpdate <= snapshot.LastUpdateID {
-					continue
+				//correct Binance algorithm:
+				//Start WebSocket connection first
+				//Then fetch the REST snapshot
+				//Check anchor on incoming messages
+				if !synced {
+					if msg.Data.FirstUpdate <= snapshot.LastUpdateID+1 && msg.Data.FinalUpdate >= snapshot.LastUpdateID+1 {
+						synced = true
+					} else if msg.Data.FinalUpdate < snapshot.LastUpdateID+1 {
+						continue
+					} else if msg.Data.FirstUpdate > snapshot.LastUpdateID+1 {
+						result, err := fetchSnapshot(ctx)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						snapshot = result
+						continue
+					}
+				} else {
+
+					if msg.Data.FinalUpdateLastStream != snapshot.LastUpdateID {
+						log.Printf("gap detected: pu=%d snapshot=%d", msg.Data.FinalUpdateLastStream, snapshot.LastUpdateID)
+						log.Printf("gap detected, restarting")
+						synced = false
+						result, err := fetchSnapshot(ctx)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						snapshot = result
+						continue outer
+					}
 				}
 
 				//apply bid updates
@@ -84,35 +117,6 @@ func ManageOrderBookBTC(ctx context.Context) <-chan SortedOrderBookSnapshot {
 					Asks:         sortAsks(snapshot.Asks),
 				}
 			}
-
-			//correct Binance algorithm:
-			//Start WebSocket connection first
-			//Then fetch the REST snapshot
-			//Check anchor on incoming messages
-
-			//if !synced {
-			//	if orderbookBTCData.Data.FirstUpdate <= snapshot.LastUpdateID && orderbookBTCData.Data.FinalUpdate >= snapshot.LastUpdateID {
-			//		synced = true
-			//	} else {
-			//		if orderbookBTCData.Data.FirstUpdate > snapshot.LastUpdateID {
-			//			result, err := fetchSnapshot()
-			//			if err != nil {
-			//				log.Println(err)
-			//				return
-			//			}
-			//			snapshot = result
-			//			continue
-			//		}
-			//	}
-			//} else {
-			//
-			//	if orderbookBTCData.Data.FinalUpdateLastStream != snapshot.LastUpdateID {
-			//		log.Printf("gap detected: pu=%d snapshot=%d", orderbookBTCData.Data.FinalUpdateLastStream, snapshot.LastUpdateID)
-			//		log.Printf("gap detected, restarting")
-			//		break
-			//	}
-			//}
-
 		}
 	}()
 
@@ -189,7 +193,6 @@ func sortBids(bids map[float64]float64) [][]string {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
-
 		return keys[i] > keys[j]
 	})
 	result := make([][]string, 0, len(keys))
@@ -206,7 +209,6 @@ func sortAsks(asks map[float64]float64) [][]string {
 	}
 
 	sort.Slice(keys, func(i, j int) bool {
-
 		return keys[i] < keys[j]
 	})
 	result := make([][]string, 0, len(keys))

@@ -24,7 +24,7 @@ type DepthUpdateMessage struct {
 }
 
 func OrderbookBTC(ctx context.Context) <-chan DepthUpdateMessage {
-	ch := make(chan DepthUpdateMessage)
+	ch := make(chan DepthUpdateMessage, 100)
 	u := url.URL{
 		Scheme:   "wss",
 		Host:     "fstream.binance.com",
@@ -43,16 +43,19 @@ func OrderbookBTC(ctx context.Context) <-chan DepthUpdateMessage {
 		c.SetReadLimit(512 * 1024)
 		defer c.Close(websocket.StatusNormalClosure, "")
 
-		for ctx.Err() == nil {
+		for {
 			btc := &DepthUpdateMessage{}
 			err := wsjson.Read(ctx, c, btc)
 			if err != nil {
 				log.Printf("json read: %v", err)
 				break
 			}
-			ch <- *btc
+			select {
+			case ch <- *btc:
+			case <-ctx.Done():
+				return
+			}
 		}
-
 	}()
 
 	return ch
